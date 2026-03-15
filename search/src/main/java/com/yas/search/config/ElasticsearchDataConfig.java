@@ -12,3 +12,4 @@ public class ElasticsearchDataConfig {
     private String username;
     private String password;
 }
+//
