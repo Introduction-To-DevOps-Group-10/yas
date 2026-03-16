@@ -1,7 +1,7 @@
 # Hướng dẫn viết Test và cấu hình coverage cho service Media
 
 ## 1. Cấu hình JaCoCo trong `pom.xml`
-Để JaCoCo có thể đo lường độ phủ của code (coverage) trong quá trình chạy test, plugin `jacoco-maven-plugin` đã được thiết lập với 2 goal chính là `prepare-agent` (cho phép agent thu thập data khi chạy test) và `report` (trích xuất báo cáo từ data sau khi test chạy xong).
+Để JaCoCo có thể đo lường độ phủ của code (coverage) trong quá trình chạy test, plugin `jacoco-maven-plugin` đã được thiết lập với 2 goal chính là `prepare-agent` (cho phép agent thu thập data khi chạy test) và `report` (trích xuất báo cáo từ data sau khi test chạy xong).>>
 
 Nội dung plugin được thêm trong `yas/media/pom.xml`:
 ```xml
