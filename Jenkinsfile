@@ -55,14 +55,10 @@ pipeline {
                     )
 
                     if (result == 0) {
-
                         echo "No secrets found"
-
                     } else {
-
                         def report = readFile('gitleaks-report.json')
                         echo report
-
                         error("Secrets detected in repository")
                     }
                 }
@@ -75,62 +71,34 @@ pipeline {
             }
         }
 
-        // ───────────────── SNYK ─────────────────
+        // ───────────────── SNYK (PLUGIN) ─────────────────
         stage('Security Scan: Snyk') {
             steps {
                 script {
 
-                    withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+                    def services = [
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
+                    ]
 
-                        sh 'snyk auth ${SNYK_TOKEN}'
+                    services.each { svc ->
 
-                        def services = [
-                            'cart','customer','order','product','rating',
-                            'inventory','media','tax','location','promotion'
-                        ]
-
-                        services.each { svc ->
-
-                            if (!fileExists("${svc}/pom.xml")) {
-                                echo "Skipping ${svc} (no pom.xml)"
-                                return
-                            }
-
-                            echo "Running Snyk scan for ${svc}"
-
-                            sh "mvn -pl ${svc} -am clean install -DskipTests -q"
-
-                            def result = sh(
-                                script: """
-                                    snyk test \
-                                      --file=${svc}/pom.xml \
-                                      --package-manager=maven \
-                                      --json-file-output=snyk-report-${svc}.json \
-                                      --severity-threshold=high
-                                """,
-                                returnStatus: true
-                            )
-
-                            if (result == 0) {
-
-                                echo "No high vulnerabilities in ${svc}"
-
-                            } else if (result == 1) {
-
-                                echo "Vulnerabilities detected in ${svc}"
-
-                            } else {
-
-                                echo "Snyk scan error for ${svc}"
-                            }
+                        if (!fileExists("${svc}/pom.xml")) {
+                            echo "Skipping ${svc} (no pom.xml)"
+                            return
                         }
-                    }
-                }
-            }
 
-            post {
-                always {
-                    archiveArtifacts artifacts: 'snyk-report-*.json', allowEmptyArchive: true
+                        echo "Running Snyk scan for ${svc}"
+
+                        snykSecurity(
+                            snykInstallation: 'snyk',
+                            snykTokenId: 'snyk-token',
+                            failOnIssues: false,
+                            projectName: "yas-${svc}",
+                            targetFile: "${svc}/pom.xml",
+                            additionalArguments: "--severity-threshold=high"
+                        )
+                    }
                 }
             }
         }
@@ -143,14 +111,11 @@ pipeline {
                     def changedFiles = ''
 
                     try {
-
                         changedFiles = sh(
                             script: "git diff --name-only HEAD~1 HEAD",
                             returnStdout: true
                         ).trim()
-
                     } catch (Exception e) {
-
                         changedFiles = sh(
                             script: "git diff --name-only origin/main...HEAD",
                             returnStdout: true
@@ -247,13 +212,11 @@ ${statusLines}
                         stage("${svc} Quality Gate") {
 
                             timeout(time: 5, unit: 'MINUTES') {
-
                                 waitForQualityGate abortPipeline: true
                             }
                         }
 
                         stage("${svc} Build") {
-
                             sh "mvn package -pl ${svc} -am -DskipTests"
                         }
                     }
