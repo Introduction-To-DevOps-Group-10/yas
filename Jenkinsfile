@@ -18,7 +18,7 @@ pipeline {
             }
         }
 
-        // ───────────────── GITLEAKS ─────────────────
+        // ───────────────── GITLEAKS ─────────────────-
         stage('Security Scan: Gitleaks') {
             steps {
                 script {
