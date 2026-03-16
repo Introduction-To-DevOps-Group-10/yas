@@ -71,8 +71,9 @@ pipeline {
                 withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
                     sh 'snyk auth ${SNYK_TOKEN}'
 
-                    // Resolve toàn bộ dependencies trước để Snyk đọc được dependency tree
-                    sh 'mvn dependency:resolve -q'
+                    // Build + install toàn bộ module vào local .m2
+                    // để các module phụ thuộc lẫn nhau (vd: payment -> payment-paypal) được resolve
+                    sh 'mvn install -DskipTests -q'
 
                     script {
                         def result = sh(
