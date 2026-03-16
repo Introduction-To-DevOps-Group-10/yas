@@ -1,3 +1,47 @@
+convince: thuyết phúc
+firm
+correspond
+run out
+workforce: lực lượng ld
+refrain: kiềm chế
+absorb: hấp thụ
+scout: trinh sát , tìm kiếm
+
+media
+product
+cart
+search
+tax
+inventory
+location
+
+cart
+customer
+order
+product
+rating
+inventory
+meida
+tax
+location
+promotion
+
+jenkins-token of Sonar
+sqa_01536c09ec0a17ec570cde4b009f6eeb9a39f4b9
+
+snyk_uat.1fcad39e.eyJlIjoxNzgxNDQ0MTUzLCJoIjoic255ay5pbyIsImoiOiJBWnoyM1V0enFBV1haczhkOHBLTU5BIiwicyI6InUtMlhadVZrU01Db0NaenBaSnp3VEEiLCJ0aWQiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIn0.mMItWusgZojnPaUZKQde94Mk7TpNSTRxxgj1aKPB1LyRclJXLPCjgrB0-xA8BouJQdA_tQmqhzecgziKK1RdDg
+
+
+export SNYK_TOKEN=snyk_uat.1fcad39e.eyJlIjoxNzgxNDQ0MTUzLCJoIjoic255ay5pbyIsImoiOiJBWnoyM1V0enFBV1haczhkOHBLTU5BIiwicyI6InUtMlhadVZrU01Db0NaenBaSnp3VEEiLCJ0aWQiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIn0.mMItWusgZojnPaUZKQde94Mk7TpNSTRxxgj1aKPB1LyRclJXLPCjgrB0-xA8BouJQdA_tQmqhzecgziKK1RdDg
+export SNYK_ORG=3c82b51e-c232-4224-ae07-8aa11c487cf3
+
+snyk test \
+    --file=media/pom.xml \
+    --package-manager=maven \
+    --severity-threshold=high \
+    --org=$SNYK_ORG \
+    2>&1 | tail -20
+
 pipeline {
     agent any
 
@@ -18,10 +62,11 @@ pipeline {
             }
         }
 
-        // ───────────────── GITLEAKS ──────────────────────
+        // ───────────────── GITLEAKS ─────────────────-
         stage('Security Scan: Gitleaks') {
             steps {
                 script {
+
                     sh 'git fetch origin main:refs/remotes/origin/main || true'
 
                     def scanRange = ''
@@ -29,10 +74,12 @@ pipeline {
                     if (env.BRANCH_NAME == 'main') {
                         scanRange = 'HEAD~1..HEAD'
                     } else {
+
                         def mainExists = sh(
                             script: 'git rev-parse --verify origin/main > /dev/null 2>&1',
                             returnStatus: true
                         )
+
                         scanRange = (mainExists == 0) ? 'origin/main..HEAD' : 'HEAD~1..HEAD'
                     }
 
@@ -41,37 +88,70 @@ pipeline {
                     def result = sh(
                         script: """
                             gitleaks detect \
-                                --source=. \
-                                --log-opts="${scanRange}" \
-                                --report-format=json \
-                                --report-path=gitleaks-report.json \
-                                --exit-code=1 \
-                                --redact
+                              --source=. \
+                              --log-opts="${scanRange}" \
+                              --report-format=json \
+                              --report-path=gitleaks-report.json \
+                              --exit-code=1 \
+                              --redact
                         """,
                         returnStatus: true
                     )
 
                     if (result == 0) {
-                        echo "Gitleaks: No secrets found in range [${scanRange}]"
+                        echo "No secrets found"
                     } else {
                         def report = readFile('gitleaks-report.json')
-                        echo "Gitleaks detected secrets!\n${report}"
-                        error("Pipeline failed: secrets found in code!")
+                        echo report
+                        error("Secrets detected in repository")
                     }
                 }
             }
+
             post {
                 always {
-                    archiveArtifacts artifacts: 'gitleaks-report.json',
-                                     allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
                 }
             }
         }
 
-        // ───────────────── DETECT CHANGES ────────────────
+        // ───────────────── SNYK (PLUGIN) ─────────────────
+        stage('Security Scan: Snyk') {
+            steps {
+                script {
+
+                    def services = [
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
+                    ]
+
+                    services.each { svc ->
+
+                        if (!fileExists("${svc}/pom.xml")) {
+                            echo "Skipping ${svc} (no pom.xml)"
+                            return
+                        }
+
+                        echo "Running Snyk scan for ${svc}"
+
+                        snykSecurity(
+                            snykInstallation: 'snyk',
+                            snykTokenId: 'snyk-token',
+                            failOnIssues: false,
+                            projectName: "yas-${svc}",
+                            targetFile: "${svc}/pom.xml",
+                            additionalArguments: "--severity-threshold=high -d"
+                        )
+                    }
+                }
+            }
+        }
+
+        // ───────────────── DETECT CHANGES ─────────────────
         stage('Detect Changes') {
             steps {
                 script {
+
                     def changedFiles = ''
 
                     try {
@@ -86,18 +166,16 @@ pipeline {
                         ).trim()
                     }
 
-                    if (changedFiles == '') {
-                        echo "No changed files detected."
-                    }
-
-                    echo "Changed files:\n${changedFiles}"
+                    echo "Changed files:"
+                    echo changedFiles
 
                     def services = [
-                        'cart', 'customer', 'order', 'product', 'rating',
-                        'inventory', 'media', 'tax', 'location', 'promotion'
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
                     ]
 
                     services.each { svc ->
+
                         env.setProperty(
                             "${svc.toUpperCase()}_CHANGED",
                             changedFiles.contains("${svc}/") ? 'true' : 'false'
@@ -105,48 +183,52 @@ pipeline {
                     }
 
                     def statusLines = services.collect { svc ->
-                        "| ${svc.padRight(10)}: ${env.getProperty("${svc.toUpperCase()}_CHANGED")}"
+                        "| ${svc.padRight(10)} : ${env.getProperty("${svc.toUpperCase()}_CHANGED")}"
                     }.join('\n')
 
                     echo """
-+---------------------------------+
-|        SERVICES TO BUILD        |
-+---------------------------------+
++----------------------------------+
+|        SERVICES TO BUILD         |
++----------------------------------+
 ${statusLines}
-+---------------------------------+
++----------------------------------+
 """
                 }
             }
         }
 
-        // ───────────────── BUILD SERVICES ────────────────
-        stage('Test & Build: All Services') {
+        // ───────────────── BUILD SERVICES ─────────────────
+        stage('Test & Build Services') {
             steps {
                 script {
+
                     def services = [
-                        'cart', 'customer', 'order', 'product', 'rating',
-                        'inventory', 'media', 'tax', 'location', 'promotion'
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
                     ]
 
                     services.each { svc ->
+
                         if (env.getProperty("${svc.toUpperCase()}_CHANGED") != 'true') {
-                            echo "Skipping ${svc} (no changes detected)"
+
+                            echo "Skipping ${svc}"
                             return
                         }
 
-                        echo "Building service: ${svc}"
+                        echo "Building ${svc}"
+
                         def projectKey = "yas-${svc}"
                         def projectName = "YAS - ${svc.capitalize()}"
 
-                        // Unit Test + Coverage
-                        stage("${svc} - Unit Test + Coverage") {
+                        stage("${svc} Unit Test") {
+
                             sh "mvn clean test jacoco:report -pl ${svc} -am"
-                            junit testResults: "${svc}/target/surefire-reports/*.xml",
-                                  allowEmptyResults: true
+
+                            junit "${svc}/target/surefire-reports/*.xml"
                         }
 
-                        // Publish Coverage
-                        stage("${svc} - Publish Coverage") {
+                        stage("${svc} Coverage") {
+
                             recordCoverage(
                                 tools: [[
                                     $class: 'CoverageTool',
@@ -157,28 +239,28 @@ ${statusLines}
                             )
                         }
 
-                        // SonarQube Analysis
-                        stage("${svc} - SonarQube Analysis") {
+                        stage("${svc} SonarQube") {
+
                             withSonarQubeEnv('SonarQube') {
+
                                 sh """
-                                    mvn sonar:sonar -pl ${svc} -am \
-                                        -Dsonar.projectKey=${projectKey} \
-                                        -Dsonar.projectName="${projectName}" \
-                                        -Dsonar.inclusions=${svc}/**/* \
-                                        -Dsonar.coverage.jacoco.xmlReportPaths=${svc}/target/site/jacoco/jacoco.xml
+                                mvn sonar:sonar -pl ${svc} -am \
+                                  -Dsonar.projectKey=${projectKey} \
+                                  -Dsonar.projectName="${projectName}" \
+                                  -Dsonar.inclusions=${svc}/**/* \
+                                  -Dsonar.coverage.jacoco.xmlReportPaths=${svc}/target/site/jacoco/jacoco.xml
                                 """
                             }
                         }
 
-                        // Quality Gate
-                        stage("${svc} - Quality Gate") {
+                        stage("${svc} Quality Gate") {
+
                             timeout(time: 5, unit: 'MINUTES') {
                                 waitForQualityGate abortPipeline: true
                             }
                         }
 
-                        // Build
-                        stage("${svc} - Build") {
+                        stage("${svc} Build") {
                             sh "mvn package -pl ${svc} -am -DskipTests"
                         }
                     }
@@ -188,14 +270,19 @@ ${statusLines}
     }
 
     post {
+
         always {
             cleanWs()
         }
+
         success {
-            echo "Pipeline completed - only affected services were built."
+            echo "Pipeline completed successfully"
         }
+
         failure {
-            echo "Pipeline failed. Check logs above."
+            echo "Pipeline failed"
         }
     }
 }
+
+https://app.snyk.io/account
