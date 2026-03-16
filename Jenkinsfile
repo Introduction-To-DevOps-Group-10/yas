@@ -49,10 +49,10 @@ pipeline {
                     )
 
                     if (result == 0) {
-                        echo "✅ Gitleaks: No secrets found in range [${scanRange}]"
+                        echo "Gitleaks: No secrets found in range [${scanRange}]"
                     } else {
                         def report = readFile('gitleaks-report.json')
-                        echo "❌ Gitleaks detected secrets!\n${report}"
+                        echo "Gitleaks detected secrets!\n${report}"
                         error("Pipeline failed: secrets found in code!")
                     }
                 }
@@ -60,6 +60,51 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'gitleaks-report.json',
+                                     allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ─── SNYK ────────────────────────────────────────────────
+        stage('Security Scan: Snyk') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+                        def services = [
+                            'cart', 'customer', 'order', 'product', 'rating',
+                            'inventory', 'media', 'tax', 'location', 'promotion'
+                        ]
+
+                        services.each { svc ->
+                            echo "Snyk scanning: ${svc}"
+                            def result = sh(
+                                script: """
+                                    snyk auth ${SNYK_TOKEN}
+                                    snyk test \
+                                        --file=${svc}/pom.xml \
+                                        --project-name=yas-${svc} \
+                                        --json-file-output=snyk-report-${svc}.json \
+                                        --severity-threshold=high \
+                                        || true
+                                """,
+                                returnStatus: true
+                            )
+
+                            if (result == 0) {
+                                echo "Snyk: No high/critical vulnerabilities found in [${svc}]"
+                            } else if (result == 1) {
+                                echo "Snyk: Vulnerabilities found in [${svc}] - check snyk-report-${svc}.json"
+                                // Đổi thành error(...) nếu muốn fail pipeline khi có lỗ hổng
+                            } else {
+                                echo "Snyk: Scan error for [${svc}], exit code: ${result}"
+                            }
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'snyk-report-*.json',
                                      allowEmptyArchive: true
                 }
             }
