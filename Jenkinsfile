@@ -19,6 +19,11 @@ pipeline {
         }
 
         // ───────────────── GITLEAKS ─────────────────-
+        stage('Fix permission') {
+            steps {
+                sh 'chmod +x mvnw'
+            }
+        }
         stage('Security Scan: Gitleaks') {
             steps {
                 script {
