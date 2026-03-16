@@ -95,19 +95,19 @@ pipeline {
                     ]
 
                     services.each { svc ->
-                        env["${svc.toUpperCase()}_CHANGED"] = changedFiles.contains("${svc}/") ? 'true' : 'false'
+                        env.setProperty("${svc.toUpperCase()}_CHANGED", changedFiles.contains("${svc}/") ? 'true' : 'false')
                     }
 
                     def statusLines = services.collect { svc ->
-                        "│ ${svc.padRight(10)}: ${env["${svc.toUpperCase()}_CHANGED"]}"
+                        "| ${svc.padRight(10)}: ${env.getProperty("${svc.toUpperCase()}_CHANGED")}"
                     }.join('\n                    ')
 
                     echo """
-                    ┌─────────────────────────────────┐
-                    │        SERVICES TO BUILD         │
-                    ├─────────────────────────────────┤
+                    +---------------------------------+
+                    |        SERVICES TO BUILD        |
+                    +---------------------------------+
                     ${statusLines}
-                    └─────────────────────────────────┘
+                    +---------------------------------+
                     """
                 }
             }
@@ -123,12 +123,12 @@ pipeline {
                     ]
 
                     services.each { svc ->
-                        if (env["${svc.toUpperCase()}_CHANGED"] != 'true') {
-                            echo "⏭️  Skipping ${svc} (no changes detected)"
+                        if (env.getProperty("${svc.toUpperCase()}_CHANGED") != 'true') {
+                            echo "Skipping ${svc} (no changes detected)"
                             return
                         }
 
-                        echo "🔨 Building service: ${svc}"
+                        echo "Building service: ${svc}"
                         def projectKey = "yas-${svc}"
                         def projectName = "YAS - ${svc.capitalize()}"
 
@@ -186,10 +186,10 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "✅ Pipeline completed — only affected services were built."
+            echo "Pipeline completed - only affected services were built."
         }
         failure {
-            echo "❌ Pipeline failed. Check logs above."
+            echo "Pipeline failed. Check logs above."
         }
     }
 }
