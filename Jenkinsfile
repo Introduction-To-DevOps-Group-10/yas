@@ -12,11 +12,13 @@ pipeline {
 
     stages {
 
-        stage('Test Credential') {
+        stage('Test Snyk Plugin') {
     steps {
-        withCredentials([string(credentialsId: 'snyk-token', variable: 'TOKEN')]) {
-            sh 'echo Token loaded'
-        }
+        snykSecurity(
+            snykInstallation: 'snyk',
+            snykTokenId: 'snyk-token',
+            targetFile: 'media/pom.xml'
+        )
     }
 }
     }
