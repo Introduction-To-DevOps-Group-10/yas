@@ -1,5 +1,6 @@
 pipeline {
     agent any
+
     tools {
         maven 'maven'
         jdk 'JDK21'
@@ -10,26 +11,31 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
-        // ─── GITLEAKS ───────────────────────────────────────────
+        // ───────────────── GITLEAKS ─────────────────
         stage('Security Scan: Gitleaks') {
             steps {
                 script {
+
                     sh 'git fetch origin main:refs/remotes/origin/main || true'
 
                     def scanRange = ''
+
                     if (env.BRANCH_NAME == 'main') {
                         scanRange = 'HEAD~1..HEAD'
                     } else {
+
                         def mainExists = sh(
                             script: 'git rev-parse --verify origin/main > /dev/null 2>&1',
                             returnStatus: true
                         )
+
                         scanRange = (mainExists == 0) ? 'origin/main..HEAD' : 'HEAD~1..HEAD'
                     }
 
@@ -38,151 +44,182 @@ pipeline {
                     def result = sh(
                         script: """
                             gitleaks detect \
-                                --source=. \
-                                --log-opts="${scanRange}" \
-                                --report-format=json \
-                                --report-path=gitleaks-report.json \
-                                --exit-code=1 \
-                                --redact
+                              --source=. \
+                              --log-opts="${scanRange}" \
+                              --report-format=json \
+                              --report-path=gitleaks-report.json \
+                              --exit-code=1 \
+                              --redact
                         """,
                         returnStatus: true
                     )
 
                     if (result == 0) {
-                        echo "Gitleaks: No secrets found in range [${scanRange}]"
+
+                        echo "No secrets found"
+
                     } else {
+
                         def report = readFile('gitleaks-report.json')
-                        echo "Gitleaks detected secrets!\n${report}"
-                        error("Pipeline failed: secrets found in code!")
+                        echo report
+
+                        error("Secrets detected in repository")
                     }
                 }
             }
+
             post {
                 always {
-                    archiveArtifacts artifacts: 'gitleaks-report.json',
-                                     allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
                 }
             }
         }
 
-        // ─── SNYK ────────────────────────────────────────────────
+        // ───────────────── SNYK ─────────────────
         stage('Security Scan: Snyk') {
             steps {
-                withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-                    sh 'snyk auth ${SNYK_TOKEN}'
+                script {
 
-                    // Build + install toàn bộ module vào local .m2
-                    // để các module phụ thuộc lẫn nhau (vd: payment -> payment-paypal) được resolve
-                    sh 'mvn install -DskipTests -q'
+                    withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
 
-                    script {
-                        def result = sh(
-                            script: """
-                                snyk test \
-                                    --file=pom.xml \
-                                    --all-projects \
-                                    --package-manager=maven \
-                                    --json-file-output=snyk-report.json \
-                                    --severity-threshold=high
-                            """,
-                            returnStatus: true
-                        )
+                        sh 'snyk auth ${SNYK_TOKEN}'
 
-                        if (result == 0) {
-                            echo "Snyk: No high/critical vulnerabilities found."
-                        } else if (result == 1) {
-                            echo "Snyk: Vulnerabilities found - check snyk-report.json"
-                            // Đổi thành error(...) nếu muốn fail pipeline khi có lỗ hổng
-                        } else {
-                            error("Snyk: Scan failed with exit code: ${result}")
+                        def services = [
+                            'cart','customer','order','product','rating',
+                            'inventory','media','tax','location','promotion'
+                        ]
+
+                        services.each { svc ->
+
+                            if (!fileExists("${svc}/pom.xml")) {
+                                echo "Skipping ${svc} (no pom.xml)"
+                                return
+                            }
+
+                            echo "Running Snyk scan for ${svc}"
+
+                            sh "mvn -pl ${svc} -am clean install -DskipTests -q"
+
+                            def result = sh(
+                                script: """
+                                    snyk test \
+                                      --file=${svc}/pom.xml \
+                                      --package-manager=maven \
+                                      --json-file-output=snyk-report-${svc}.json \
+                                      --severity-threshold=high
+                                """,
+                                returnStatus: true
+                            )
+
+                            if (result == 0) {
+
+                                echo "No high vulnerabilities in ${svc}"
+
+                            } else if (result == 1) {
+
+                                echo "Vulnerabilities detected in ${svc}"
+
+                            } else {
+
+                                echo "Snyk scan error for ${svc}"
+                            }
                         }
                     }
                 }
             }
+
             post {
                 always {
-                    archiveArtifacts artifacts: 'snyk-report.json',
-                                     allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'snyk-report-*.json', allowEmptyArchive: true
                 }
             }
         }
 
-        // ─── DETECT CHANGES ─────────────────────────────────────
+        // ───────────────── DETECT CHANGES ─────────────────
         stage('Detect Changes') {
             steps {
                 script {
+
                     def changedFiles = ''
 
                     try {
+
                         changedFiles = sh(
                             script: "git diff --name-only HEAD~1 HEAD",
                             returnStdout: true
                         ).trim()
+
                     } catch (Exception e) {
+
                         changedFiles = sh(
                             script: "git diff --name-only origin/main...HEAD",
                             returnStdout: true
                         ).trim()
                     }
 
-                    if (changedFiles == '') {
-                        echo "No changed files detected."
-                    }
-
-                    echo "Changed files:\n${changedFiles}"
+                    echo "Changed files:"
+                    echo changedFiles
 
                     def services = [
-                        'cart', 'customer', 'order', 'product', 'rating',
-                        'inventory', 'media', 'tax', 'location', 'promotion'
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
                     ]
 
                     services.each { svc ->
-                        env.setProperty("${svc.toUpperCase()}_CHANGED", changedFiles.contains("${svc}/") ? 'true' : 'false')
+
+                        env.setProperty(
+                            "${svc.toUpperCase()}_CHANGED",
+                            changedFiles.contains("${svc}/") ? 'true' : 'false'
+                        )
                     }
 
                     def statusLines = services.collect { svc ->
-                        "| ${svc.padRight(10)}: ${env.getProperty("${svc.toUpperCase()}_CHANGED")}"
-                    }.join('\n                    ')
+                        "| ${svc.padRight(10)} : ${env.getProperty("${svc.toUpperCase()}_CHANGED")}"
+                    }.join('\n')
 
                     echo """
-                    +---------------------------------+
-                    |        SERVICES TO BUILD        |
-                    +---------------------------------+
-                    ${statusLines}
-                    +---------------------------------+
-                    """
++----------------------------------+
+|        SERVICES TO BUILD         |
++----------------------------------+
+${statusLines}
++----------------------------------+
+"""
                 }
             }
         }
 
-        // ─── BUILD EACH SERVICE ─────────────────────────────────
-        stage('Test & Build: All Services') {
+        // ───────────────── BUILD SERVICES ─────────────────
+        stage('Test & Build Services') {
             steps {
                 script {
+
                     def services = [
-                        'cart', 'customer', 'order', 'product', 'rating',
-                        'inventory', 'media', 'tax', 'location', 'promotion'
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
                     ]
 
                     services.each { svc ->
+
                         if (env.getProperty("${svc.toUpperCase()}_CHANGED") != 'true') {
-                            echo "Skipping ${svc} (no changes detected)"
+
+                            echo "Skipping ${svc}"
                             return
                         }
 
-                        echo "Building service: ${svc}"
+                        echo "Building ${svc}"
+
                         def projectKey = "yas-${svc}"
                         def projectName = "YAS - ${svc.capitalize()}"
 
-                        // Unit Test + Coverage
-                        stage("${svc} - Unit Test + Coverage") {
+                        stage("${svc} Unit Test") {
+
                             sh "mvn clean test jacoco:report -pl ${svc} -am"
-                            junit testResults: "${svc}/target/surefire-reports/*.xml",
-                                  allowEmptyResults: true
+
+                            junit "${svc}/target/surefire-reports/*.xml"
                         }
 
-                        // Publish Coverage
-                        stage("${svc} - Publish Coverage") {
+                        stage("${svc} Coverage") {
+
                             recordCoverage(
                                 tools: [[
                                     $class: 'CoverageTool',
@@ -193,28 +230,30 @@ pipeline {
                             )
                         }
 
-                        // SonarQube Analysis
-                        stage("${svc} - SonarQube Analysis") {
+                        stage("${svc} SonarQube") {
+
                             withSonarQubeEnv('SonarQube') {
+
                                 sh """
-                                    mvn sonar:sonar -pl ${svc} -am \
-                                        -Dsonar.projectKey=${projectKey} \
-                                        -Dsonar.projectName="${projectName}" \
-                                        -Dsonar.inclusions=${svc}/**/* \
-                                        -Dsonar.coverage.jacoco.xmlReportPaths=${svc}/target/site/jacoco/jacoco.xml
+                                mvn sonar:sonar -pl ${svc} -am \
+                                  -Dsonar.projectKey=${projectKey} \
+                                  -Dsonar.projectName="${projectName}" \
+                                  -Dsonar.inclusions=${svc}/**/* \
+                                  -Dsonar.coverage.jacoco.xmlReportPaths=${svc}/target/site/jacoco/jacoco.xml
                                 """
                             }
                         }
 
-                        // Quality Gate
-                        stage("${svc} - Quality Gate") {
+                        stage("${svc} Quality Gate") {
+
                             timeout(time: 5, unit: 'MINUTES') {
+
                                 waitForQualityGate abortPipeline: true
                             }
                         }
 
-                        // Build
-                        stage("${svc} - Build") {
+                        stage("${svc} Build") {
+
                             sh "mvn package -pl ${svc} -am -DskipTests"
                         }
                     }
@@ -224,14 +263,17 @@ pipeline {
     }
 
     post {
+
         always {
             cleanWs()
         }
+
         success {
-            echo "Pipeline completed - only affected services were built."
+            echo "Pipeline completed successfully"
         }
+
         failure {
-            echo "Pipeline failed. Check logs above."
+            echo "Pipeline failed"
         }
     }
 }
