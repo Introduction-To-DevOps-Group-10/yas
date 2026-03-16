@@ -1,47 +1,3 @@
-convince: thuyết phúc
-firm
-correspond
-run out
-workforce: lực lượng ld
-refrain: kiềm chế
-absorb: hấp thụ
-scout: trinh sát , tìm kiếm
-
-media
-product
-cart
-search
-tax
-inventory
-location
-
-cart
-customer
-order
-product
-rating
-inventory
-meida
-tax
-location
-promotion
-
-jenkins-token of Sonar
-sqa_01536c09ec0a17ec570cde4b009f6eeb9a39f4b9
-
-snyk_uat.1fcad39e.eyJlIjoxNzgxNDQ0MTUzLCJoIjoic255ay5pbyIsImoiOiJBWnoyM1V0enFBV1haczhkOHBLTU5BIiwicyI6InUtMlhadVZrU01Db0NaenBaSnp3VEEiLCJ0aWQiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIn0.mMItWusgZojnPaUZKQde94Mk7TpNSTRxxgj1aKPB1LyRclJXLPCjgrB0-xA8BouJQdA_tQmqhzecgziKK1RdDg
-
-
-export SNYK_TOKEN=snyk_uat.1fcad39e.eyJlIjoxNzgxNDQ0MTUzLCJoIjoic255ay5pbyIsImoiOiJBWnoyM1V0enFBV1haczhkOHBLTU5BIiwicyI6InUtMlhadVZrU01Db0NaenBaSnp3VEEiLCJ0aWQiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIn0.mMItWusgZojnPaUZKQde94Mk7TpNSTRxxgj1aKPB1LyRclJXLPCjgrB0-xA8BouJQdA_tQmqhzecgziKK1RdDg
-export SNYK_ORG=3c82b51e-c232-4224-ae07-8aa11c487cf3
-
-snyk test \
-    --file=media/pom.xml \
-    --package-manager=maven \
-    --severity-threshold=high \
-    --org=$SNYK_ORG \
-    2>&1 | tail -20
-
 pipeline {
     agent any
 
@@ -284,5 +240,3 @@ ${statusLines}
         }
     }
 }
-
-https://app.snyk.io/account
