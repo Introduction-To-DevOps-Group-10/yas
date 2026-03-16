@@ -79,50 +79,59 @@ pipeline {
         stage('Security Scan: Snyk') {
             steps {
                 script {
-
+        
                     withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-
+        
                         sh 'snyk auth ${SNYK_TOKEN}'
-
+        
                         def services = [
-                                'cart', 'customer', 'order', 'product', 'rating',
-                                'inventory', 'media', 'tax', 'location', 'promotion'
+                            'cart','customer','order','product','rating',
+                            'inventory','media','tax','location','promotion'
                         ]
-
+        
                         services.each { svc ->
-
-                            echo "Running Snyk scan for service: ${svc}"
-
-                            sh "mvn dependency:resolve -pl ${svc} -am -q"
-
+        
+                            echo "Running Snyk scan for ${svc}"
+        
+                            // build dependency tree
+                            sh "mvn -pl ${svc} -am clean install -DskipTests -q"
+        
                             def result = sh(
-                                    script: """
-                                        snyk test \
-                                          --file=${svc}/pom.xml \
-                                          --package-manager=maven \
-                                          --project-name=yas-${svc} \
-                                          --json-file-output=snyk-report-${svc}.json \
-                                          --severity-threshold=high
-                                    """,
-                                    returnStatus: true
+                                script: """
+                                    snyk test \
+                                      --file=${svc}/pom.xml \
+                                      --package-manager=maven \
+                                      --maven-aggregate-project \
+                                      --project-name=yas-${svc} \
+                                      --json-file-output=snyk-report-${svc}.json \
+                                      --severity-threshold=high
+                                """,
+                                returnStatus: true
                             )
-
+        
                             if (result == 0) {
-
-                                echo "Snyk: No high/critical vulnerabilities in ${svc}"
-
+        
+                                echo "No high vulnerabilities in ${svc}"
+        
                             } else if (result == 1) {
-
-                                echo "Snyk: Vulnerabilities found in ${svc}. Check report."
-
+        
+                                echo "Vulnerabilities detected in ${svc}"
+        
                             } else {
-
+        
                                 echo "Snyk scan error for ${svc}"
                             }
                         }
                     }
                 }
             }
+        
+            post {
+                always {
+                    archiveArtifacts artifacts: 'snyk-report-*.json', allowEmptyArchive: true
+                }
+            }
+        }
 
             post {
                 always {
