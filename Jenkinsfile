@@ -18,7 +18,7 @@ pipeline {
             }
         }
 
-        // ───────────────── GITLEAKS SCAN ─────────────────
+        // ───────────────── GITLEAKS ─────────────────
         stage('Security Scan: Gitleaks') {
             steps {
                 script {
@@ -32,8 +32,8 @@ pipeline {
                     } else {
 
                         def mainExists = sh(
-                                script: 'git rev-parse --verify origin/main > /dev/null 2>&1',
-                                returnStatus: true
+                            script: 'git rev-parse --verify origin/main > /dev/null 2>&1',
+                            returnStatus: true
                         )
 
                         scanRange = (mainExists == 0) ? 'origin/main..HEAD' : 'HEAD~1..HEAD'
@@ -42,28 +42,28 @@ pipeline {
                     echo "Scanning range: ${scanRange}"
 
                     def result = sh(
-                            script: """
-                                gitleaks detect \
-                                  --source=. \
-                                  --log-opts="${scanRange}" \
-                                  --report-format=json \
-                                  --report-path=gitleaks-report.json \
-                                  --exit-code=1 \
-                                  --redact
-                            """,
-                            returnStatus: true
+                        script: """
+                            gitleaks detect \
+                              --source=. \
+                              --log-opts="${scanRange}" \
+                              --report-format=json \
+                              --report-path=gitleaks-report.json \
+                              --exit-code=1 \
+                              --redact
+                        """,
+                        returnStatus: true
                     )
 
                     if (result == 0) {
 
-                        echo "Gitleaks: No secrets found in range [${scanRange}]"
+                        echo "No secrets found"
 
                     } else {
 
                         def report = readFile('gitleaks-report.json')
-                        echo "Secrets detected:\\n${report}"
+                        echo report
 
-                        error("Pipeline failed because secrets were detected!")
+                        error("Secrets detected in repository")
                     }
                 }
             }
@@ -75,27 +75,27 @@ pipeline {
             }
         }
 
-        // ───────────────── SNYK SCAN ─────────────────
+        // ───────────────── SNYK ─────────────────
         stage('Security Scan: Snyk') {
             steps {
                 script {
-        
+
                     withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
-        
+
                         sh 'snyk auth ${SNYK_TOKEN}'
-        
+
                         def services = [
                             'cart','customer','order','product','rating',
                             'inventory','media','tax','location','promotion'
                         ]
-        
+
                         services.each { svc ->
-        
+
                             echo "Running Snyk scan for ${svc}"
-        
+
                             // build dependency tree
                             sh "mvn -pl ${svc} -am clean install -DskipTests -q"
-        
+
                             def result = sh(
                                 script: """
                                     snyk test \
@@ -108,30 +108,23 @@ pipeline {
                                 """,
                                 returnStatus: true
                             )
-        
+
                             if (result == 0) {
-        
+
                                 echo "No high vulnerabilities in ${svc}"
-        
+
                             } else if (result == 1) {
-        
+
                                 echo "Vulnerabilities detected in ${svc}"
-        
+
                             } else {
-        
+
                                 echo "Snyk scan error for ${svc}"
                             }
                         }
                     }
                 }
             }
-        
-            post {
-                always {
-                    archiveArtifacts artifacts: 'snyk-report-*.json', allowEmptyArchive: true
-                }
-            }
-        }
 
             post {
                 always {
@@ -150,30 +143,31 @@ pipeline {
                     try {
 
                         changedFiles = sh(
-                                script: "git diff --name-only HEAD~1 HEAD",
-                                returnStdout: true
+                            script: "git diff --name-only HEAD~1 HEAD",
+                            returnStdout: true
                         ).trim()
 
                     } catch (Exception e) {
 
                         changedFiles = sh(
-                                script: "git diff --name-only origin/main...HEAD",
-                                returnStdout: true
+                            script: "git diff --name-only origin/main...HEAD",
+                            returnStdout: true
                         ).trim()
                     }
 
-                    echo "Changed files:\\n${changedFiles}"
+                    echo "Changed files:"
+                    echo changedFiles
 
                     def services = [
-                            'cart', 'customer', 'order', 'product', 'rating',
-                            'inventory', 'media', 'tax', 'location', 'promotion'
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
                     ]
 
                     services.each { svc ->
 
                         env.setProperty(
-                                "${svc.toUpperCase()}_CHANGED",
-                                changedFiles.contains("${svc}/") ? 'true' : 'false'
+                            "${svc.toUpperCase()}_CHANGED",
+                            changedFiles.contains("${svc}/") ? 'true' : 'false'
                         )
                     }
 
@@ -198,19 +192,19 @@ ${statusLines}
                 script {
 
                     def services = [
-                            'cart', 'customer', 'order', 'product', 'rating',
-                            'inventory', 'media', 'tax', 'location', 'promotion'
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
                     ]
 
                     services.each { svc ->
 
                         if (env.getProperty("${svc.toUpperCase()}_CHANGED") != 'true') {
 
-                            echo "Skipping ${svc} (no changes)"
+                            echo "Skipping ${svc}"
                             return
                         }
 
-                        echo "Building service: ${svc}"
+                        echo "Building ${svc}"
 
                         def projectKey = "yas-${svc}"
                         def projectName = "YAS - ${svc.capitalize()}"
@@ -225,12 +219,12 @@ ${statusLines}
                         stage("${svc} Coverage") {
 
                             recordCoverage(
-                                    tools: [[
-                                                    $class: 'CoverageTool',
-                                                    parser: 'JACOCO',
-                                                    pattern: "**/${svc}/target/site/jacoco/jacoco.xml"
-                                            ]],
-                                    sourceDirectories: [[path: "${svc}/src/main/java"]]
+                                tools: [[
+                                    $class: 'CoverageTool',
+                                    parser: 'JACOCO',
+                                    pattern: "**/${svc}/target/site/jacoco/jacoco.xml"
+                                ]],
+                                sourceDirectories: [[path: "${svc}/src/main/java"]]
                             )
                         }
 
@@ -277,7 +271,7 @@ ${statusLines}
         }
 
         failure {
-            echo "Pipeline failed. Check logs."
+            echo "Pipeline failed"
         }
     }
 }
