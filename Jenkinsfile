@@ -39,11 +39,12 @@ pipeline {
                         snykTokenId         : 'snyk-token',
                         failOnIssues        : false,
                         monitorProjectOnBuild: false,   // tắt monitor để gọn log
+                        monitorProjectOnBuild: true,
                         projectName         : 'yas-cart',
                         targetFile          : 'cart/pom.xml',
                         // Không dùng --json → Snyk in text ra thẳng log
                         additionalArguments : '--severity-threshold=high',
-                        monitorProjectOnBuild: true
+                        
                     )
                 }
             }
