@@ -2,10 +2,8 @@ pipeline {
     agent any
 
     environment {
-        REVISION        = "1.0-SNAPSHOT"
-        MAVEN_REPO      = "/var/lib/jenkins/.m2/repository"
-
-       
+        REVISION   = "1.0-SNAPSHOT"
+        MAVEN_REPO = "/var/lib/jenkins/.m2/repository"
     }
 
     stages {
@@ -14,19 +12,13 @@ pipeline {
         stage('Prepare Maven') {
         // ------------------------------------------------------------------ //
             steps {
-                // Xóa cache cũ để tránh dùng artifact stale
                 sh 'rm -rf ${MAVEN_REPO}/com/yas'
-
-                // Cài parent POM vào local repo
                 sh '''
                     mvn install -N \
                         -DskipTests \
                         -Drevision=${REVISION} \
                         -Dmaven.repo.local=${MAVEN_REPO}
                 '''
-
-                // Flatten + cài common-library vào local repo
-                // (bước này fix lỗi "Could not find artifact com.yas:yas:pom:${revision}")
                 sh '''
                     mvn flatten:flatten install \
                         -DskipTests \
@@ -41,26 +33,17 @@ pipeline {
         stage('Security Scan: Snyk - cart') {
         // ------------------------------------------------------------------ //
             steps {
-                // Đánh dấu thời điểm TRƯỚC KHI scan để post có thể tìm đúng report mới
+                // Lưu WORKSPACE path vào file marker để post dùng lại
+                // (tránh vấn đề working directory thay đổi trong post block)
+                sh 'echo "${WORKSPACE}" > /tmp/snyk_workspace_path'
                 sh 'touch /tmp/snyk_scan_start_marker'
 
                 snykSecurity(
                     snykInstallation : 'snyk',
-
-                    // snykTokenId phải trỏ đúng credential ID trong Jenkins
-                    // Credential này phải là "Secret text" chứa Snyk PAT
-                    // của tài khoản là thành viên org tunas106
                     snykTokenId      : 'snyk-token',
-
-                    // true  → pipeline FAIL khi có vulnerability (khuyến nghị cho production)
-                    // false → chỉ cảnh báo, pipeline vẫn SUCCESS
                     failOnIssues     : false,
-
                     projectName      : 'yas-cart',
                     targetFile       : 'cart/pom.xml',
-
-                    // --severity-threshold=high : chỉ báo cáo lỗi mức HIGH trở lên
-                    // Bỏ -d nếu không cần verbose log (giảm noise)
                     additionalArguments: '--severity-threshold=high'
                 )
             }
@@ -71,18 +54,31 @@ pipeline {
     post {
         always {
             script {
-                // Tìm report được tạo SAU marker → đúng report của lần scan này
-                // Fix lỗi post đọc nhầm report cũ
+                // Đọc workspace path đã lưu — tránh lỗi working dir sai trong post
+                def ws = sh(
+                    script: 'cat /tmp/snyk_workspace_path 2>/dev/null || echo ""',
+                    returnStdout: true
+                ).trim()
+
+                if (!ws) {
+                    ws = env.WORKSPACE
+                }
+
+                echo "Workspace: ${ws}"
+
+                // Liệt kê tất cả report để debug
+                sh "ls -lt '${ws}'/*snyk_report.json 2>/dev/null || echo 'Không có report nào trong workspace'"
+
+                // Tìm report mới hơn marker trong đúng workspace path
                 def report = sh(
-                    script: '''
-                        find . -maxdepth 1 \
-                               -name "*snyk_report.json" \
-                               -newer /tmp/snyk_scan_start_marker \
-                               -printf "%T@ %p\n" 2>/dev/null \
-                        | sort -rn \
-                        | head -1 \
-                        | awk '{print $2}'
-                    ''',
+                    script: """
+                        find '${ws}' -maxdepth 1 \
+                            -name '*snyk_report.json' \
+                            -newer /tmp/snyk_scan_start_marker \
+                            2>/dev/null \
+                        | sort -r \
+                        | head -1
+                    """,
                     returnStdout: true
                 ).trim()
 
@@ -90,11 +86,23 @@ pipeline {
                     echo "=== SNYK REPORT: ${report} ==="
                     sh "cat '${report}' | python3 -m json.tool 2>/dev/null || cat '${report}'"
                 } else {
-                    echo "Không tìm thấy Snyk report mới. Kiểm tra lại bước scan."
+                    // Fallback: lấy report mới nhất bất kể marker
+                    echo "Không tìm thấy report mới hơn marker, lấy report mới nhất..."
+                    def fallback = sh(
+                        script: "ls -t '${ws}'/*snyk_report.json 2>/dev/null | head -1",
+                        returnStdout: true
+                    ).trim()
+
+                    if (fallback) {
+                        echo "=== SNYK REPORT (fallback): ${fallback} ==="
+                        sh "cat '${fallback}' | python3 -m json.tool 2>/dev/null || cat '${fallback}'"
+                    } else {
+                        echo "Không tìm thấy bất kỳ Snyk report nào."
+                    }
                 }
 
-                // Dọn marker
-                sh 'rm -f /tmp/snyk_scan_start_marker'
+                // Dọn dẹp marker
+                sh 'rm -f /tmp/snyk_scan_start_marker /tmp/snyk_workspace_path'
             }
         }
 
