@@ -9,48 +9,40 @@ pipeline {
     stages {
         stage('Prepare Maven') {
             steps {
-                // Xóa cache cũ
                 sh 'rm -rf ${MAVEN_REPO}/com/yas'
-
-                // Install root POM
                 sh 'mvn install -N -DskipTests -Drevision=${REVISION} -Dmaven.repo.local=${MAVEN_REPO}'
-
-                // Install common-library với flatten để resolve ${revision}
                 sh 'mvn flatten:flatten install -DskipTests -Drevision=${REVISION} -Dmaven.repo.local=${MAVEN_REPO} -f common-library/pom.xml'
             }
         }
 
-        stage('Security Scan: Snyk') {
+        stage('Security Scan: Snyk - cart') {
             steps {
-                script {
-                    def services = [
-                        'cart', 'customer', 'order', 'product', 'rating',
-                        'inventory', 'media', 'tax', 'location', 'promotion'
-                    ]
-
-                    services.each { svc ->
-                        if (!fileExists("${svc}/pom.xml")) {
-                            echo "Skipping ${svc} (no pom.xml)"
-                            return
-                        }
-
-                        echo "Running Snyk scan for ${svc}"
-                        snykSecurity(
-                            snykInstallation: 'snyk',
-                            snykTokenId: 'snyk-token',
-                            failOnIssues: false,
-                            projectName: "yas-${svc}",
-                            targetFile: "${svc}/pom.xml",
-                            additionalArguments: '--severity-threshold=high -d'
-                        )
-                    }
-                }
+                snykSecurity(
+                    snykInstallation: 'snyk',
+                    snykTokenId: 'snyk-token',
+                    // Đổi thành true để pipeline FAIL khi có vulnerability
+                    failOnIssues: true,
+                    projectName: 'yas-cart',
+                    targetFile: 'cart/pom.xml',
+                    // Đổi thành low để bắt tất cả mức độ
+                    additionalArguments: '--severity-threshold=low -d'
+                )
             }
         }
     }
 
     post {
-        success { echo "Snyk scan completed" }
-        failure { echo "Pipeline failed" }
+        always {
+            // Hiển thị report JSON để đọc kết quả
+            sh '''
+                REPORT=$(ls -t *snyk_report.json 2>/dev/null | head -1)
+                if [ -n "$REPORT" ]; then
+                    echo "=== SNYK REPORT ==="
+                    cat "$REPORT" | python3 -m json.tool 2>/dev/null || cat "$REPORT"
+                fi
+            '''
+        }
+        success { echo "No vulnerabilities found" }
+        failure { echo "Vulnerabilities detected!" }
     }
 }
