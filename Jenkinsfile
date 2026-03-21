@@ -33,6 +33,8 @@ pipeline {
         stage('Security Scan: Snyk - cart') {
         // ------------------------------------------------------------------ //
             steps {
+                // Dùng snykSecurity plugin bình thường
+                // Plugin sẽ tự tạo file *_snyk_report.json trong WORKSPACE
                 snykSecurity(
                     snykInstallation : 'snyk',
                     snykTokenId      : 'snyk-token',
@@ -44,45 +46,37 @@ pipeline {
             }
 
             post {
-                // Chạy NGAY SAU khi stage kết thúc — report chắc chắn đã tồn tại
                 always {
                     script {
-                        // Dùng find với -mmin 2: tìm file được tạo trong vòng 2 phút gần nhất
-                        // Không dùng glob expansion, không dùng marker file
+                        // Snyk plugin luôn tạo file có tên format: <timestamp>Z_snyk_report.json
+                        // Tên file chứa timestamp UTC dạng: 2026-03-21T11-47-07-898350324Z
+                        // Sort theo tên DESCENDING sẽ cho file MỚI NHẤT lên đầu
+                        // VÌ: format timestamp đảm bảo sort theo tên = sort theo thời gian
+                        //
+                        // Lưu ý: sort -r với tên file dạng 2026-03-21T10-54 vs 2026-03-21T11-47
+                        // "T11" > "T10" nên sort -r đúng
+                        // Lỗi trước là dùng ls -t (sort theo mtime) và glob expansion
+                        // Fix: dùng find + sort theo TÊN FILE (không phải mtime)
+
                         def report = sh(
                             script: """
                                 find '${env.WORKSPACE}' \
                                     -maxdepth 1 \
-                                    -name '*snyk_report.json' \
-                                    -mmin -2 \
+                                    -name '*Z_snyk_report.json' \
                                     -type f \
+                                    -printf '%f %p\n' \
                                 | sort -r \
-                                | head -1
+                                | head -1 \
+                                | awk '{print \$2}'
                             """,
                             returnStdout: true
                         ).trim()
-
-                        if (!report) {
-                            // Fallback: lấy file có tên timestamp lớn nhất (sort theo tên)
-                            report = sh(
-                                script: """
-                                    find '${env.WORKSPACE}' \
-                                        -maxdepth 1 \
-                                        -name '*snyk_report.json' \
-                                        -type f \
-                                    | sort -r \
-                                    | head -1
-                                """,
-                                returnStdout: true
-                            ).trim()
-                            echo "Dùng fallback report: ${report}"
-                        }
 
                         if (report) {
                             echo "=== SNYK REPORT: ${report} ==="
                             sh "python3 -m json.tool '${report}' 2>/dev/null || cat '${report}'"
                         } else {
-                            echo "Không tìm thấy Snyk report nào."
+                            echo "Không tìm thấy Snyk report."
                         }
                     }
                 }
