@@ -97,7 +97,7 @@ pipeline {
 
                     def services = [
                         'cart','customer','order','product','rating',
-                        'inventory','media','tax','location','promotion'
+                        'inventory','media','tax','location','search'
                     ]
 
                     services.each { svc ->
