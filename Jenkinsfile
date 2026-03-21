@@ -42,7 +42,8 @@ pipeline {
                         projectName         : 'yas-cart',
                         targetFile          : 'cart/pom.xml',
                         // Không dùng --json → Snyk in text ra thẳng log
-                        additionalArguments : '--severity-threshold=high'
+                        additionalArguments : '--severity-threshold=high',
+                        monitorProjectOnBuild: true
                     )
                 }
             }
