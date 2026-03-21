@@ -22,7 +22,6 @@ pipeline {
         stage('Security Scan: Gitleaks') {
             steps {
                 script {
-
                     sh 'git fetch origin main:refs/remotes/origin/main || true'
 
                     def scanRange = ''
@@ -30,12 +29,10 @@ pipeline {
                     if (env.BRANCH_NAME == 'main') {
                         scanRange = 'HEAD~1..HEAD'
                     } else {
-
                         def mainExists = sh(
                             script: 'git rev-parse --verify origin/main > /dev/null 2>&1',
                             returnStatus: true
                         )
-
                         scanRange = (mainExists == 0) ? 'origin/main..HEAD' : 'HEAD~1..HEAD'
                     }
 
@@ -63,7 +60,6 @@ pipeline {
                     }
                 }
             }
-
             post {
                 always {
                     archiveArtifacts artifacts: 'gitleaks-report.json', allowEmptyArchive: true
@@ -71,13 +67,10 @@ pipeline {
             }
         }
 
-       
-
         // ───────────────── DETECT CHANGES ─────────────────
         stage('Detect Changes') {
             steps {
                 script {
-
                     def changedFiles = ''
 
                     try {
@@ -100,16 +93,14 @@ pipeline {
                         'inventory','media','tax','location','search'
                     ]
 
+                    // ĐÃ SỬA LỖI CÚ PHÁP: Gán biến môi trường đúng cách trong Jenkins
                     services.each { svc ->
-
-                        env.setProperty(
-                            "${svc.toUpperCase()}_CHANGED",
-                            changedFiles.contains("${svc}/") ? 'true' : 'false'
-                        )
+                        env."${svc.toUpperCase()}_CHANGED" = changedFiles.contains("${svc}/") ? 'true' : 'false'
                     }
 
+                    // ĐÃ SỬA LỖI CÚ PHÁP: Đọc biến môi trường đúng cách
                     def statusLines = services.collect { svc ->
-                        "| ${svc.padRight(10)} : ${env.getProperty("${svc.toUpperCase()}_CHANGED")}"
+                        "| ${svc.padRight(10)} : ${env."${svc.toUpperCase()}_CHANGED"}"
                     }.join('\n')
 
                     echo """
@@ -127,7 +118,6 @@ ${statusLines}
         stage('Test & Build Services') {
             steps {
                 script {
-
                     def services = [
                         'cart','customer','order','product','rating',
                         'inventory','media','tax','location','search'
@@ -135,10 +125,10 @@ ${statusLines}
 
                     services.each { svc ->
 
-                        if (env.getProperty("${svc.toUpperCase()}_CHANGED") != 'true') {
-
+                        // ĐÃ SỬA LỖI CÚ PHÁP: Đọc biến môi trường kiểm tra điều kiện
+                        if (env."${svc.toUpperCase()}_CHANGED" != 'true') {
                             echo "Skipping ${svc}"
-                            return
+                            return // Tương đương với lệnh 'continue' trong vòng lặp each của Groovy
                         }
 
                         echo "Building ${svc}"
@@ -147,14 +137,11 @@ ${statusLines}
                         def projectName = "YAS - ${svc.capitalize()}"
 
                         stage("${svc} Unit Test") {
-
                             sh "mvn clean test jacoco:report -pl ${svc} -am"
-
                             junit "${svc}/target/surefire-reports/*.xml"
                         }
 
                         stage("${svc} Coverage") {
-
                             recordCoverage(
                                 tools: [[
                                     $class: 'CoverageTool',
@@ -166,9 +153,8 @@ ${statusLines}
                         }
 
                         stage("${svc} SonarQube") {
-
                             withSonarQubeEnv('SonarQube') {
-
+                                // ĐÃ SỬA: Bổ sung tham số -Dsonar.host.url để fix lỗi Connection Reset
                                 sh """
                                 mvn sonar:sonar -pl ${svc} -am \
                                   -Dsonar.host.url=${SONAR_HOST_URL} \
@@ -181,7 +167,6 @@ ${statusLines}
                         }
 
                         stage("${svc} Quality Gate") {
-
                             timeout(time: 5, unit: 'MINUTES') {
                                 waitForQualityGate abortPipeline: true
                             }
@@ -197,15 +182,12 @@ ${statusLines}
     }
 
     post {
-
         always {
             cleanWs()
         }
-
         success {
             echo "Pipeline completed successfully"
         }
-
         failure {
             echo "Pipeline failed"
         }
