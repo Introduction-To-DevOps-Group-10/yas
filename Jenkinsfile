@@ -2,24 +2,24 @@ pipeline {
     agent any
 
     environment {
-        // Buộc tất cả Maven process (kể cả của Snyk) dùng cùng 1 local repo
-        MAVEN_OPTS = "-Dmaven.repo.local=/var/lib/jenkins/.m2/repository"
+        REVISION = "1.0-SNAPSHOT"
+        MAVEN_REPO = "/var/lib/jenkins/.m2/repository"
     }
 
     stages {
         stage('Prepare Maven') {
             steps {
-                // Xóa cache lỗi cũ
+                // Xóa cache cũ
                 sh 'rm -rf /var/lib/jenkins/.m2/repository/com/yas'
 
-                // Install root POM với revision rõ ràng
-                sh 'mvn install -N -DskipTests -Drevision=1.0-SNAPSHOT'
+                // Install root POM
+                sh 'mvn install -N -DskipTests -Drevision=${REVISION} -Dmaven.repo.local=${MAVEN_REPO}'
 
-                // Install common-library
-                sh 'mvn install -DskipTests -Drevision=1.0-SNAPSHOT -f common-library/pom.xml'
+                // Install common-library với flatten plugin để resolve ${revision} trong pom
+                sh 'mvn flatten:flatten install -DskipTests -Drevision=${REVISION} -Dmaven.repo.local=${MAVEN_REPO} -f common-library/pom.xml'
 
-                // Verify cart có thể resolve dependency (test trước khi Snyk chạy)
-                sh 'mvn dependency:resolve -Drevision=1.0-SNAPSHOT -f cart/pom.xml -o || mvn dependency:resolve -Drevision=1.0-SNAPSHOT -f cart/pom.xml'
+                // Verify cart resolve được
+                sh 'mvn dependency:resolve -Drevision=${REVISION} -Dmaven.repo.local=${MAVEN_REPO} -f cart/pom.xml'
             }
         }
 
@@ -31,7 +31,7 @@ pipeline {
                     failOnIssues: false,
                     projectName: 'yas-cart',
                     targetFile: 'cart/pom.xml',
-                    additionalArguments: '--severity-threshold=high -d --maven-aggregate-project'
+                    additionalArguments: '--severity-threshold=high -d'
                 )
             }
         }
