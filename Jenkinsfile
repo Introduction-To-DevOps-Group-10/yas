@@ -3,6 +3,13 @@ pipeline {
     stages {
         stage('Security Scan: Snyk') {
             steps {
+                // Bước 1: Fix permission mvnw
+                sh 'find . -name "mvnw" -exec chmod +x {} +'
+
+                // Bước 2: Install root POM vào local Maven repo
+                // để các module con resolve được ${revision} và common-library
+                sh './mvnw install -N -DskipTests'
+
                 script {
                     def services = [
                         'cart','customer','order','product','rating',
@@ -13,12 +20,6 @@ pipeline {
                             echo "Skipping ${svc} (no pom.xml)"
                             return
                         }
-
-                        // Fix: cấp quyền execute cho mvnw trước khi Snyk chạy
-                        if (fileExists("${svc}/mvnw")) {
-                            sh "chmod +x ${svc}/mvnw"
-                        }
-
                         echo "Running Snyk scan for ${svc}"
                         snykSecurity(
                             snykInstallation: 'snyk',
@@ -34,11 +35,7 @@ pipeline {
         }
     }
     post {
-        success {
-            echo "Snyk scan completed (debug mode)"
-        }
-        failure {
-            echo "Pipeline failed"
-        }
+        success { echo "Snyk scan completed" }
+        failure { echo "Pipeline failed" }
     }
 }
