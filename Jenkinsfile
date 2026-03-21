@@ -1,29 +1,25 @@
 pipeline {
     agent any
-
-
-
     stages {
-
-         // ───────────────── SNYK (PLUGIN) ─────────────────
         stage('Security Scan: Snyk') {
             steps {
                 script {
-
                     def services = [
                         'cart','customer','order','product','rating',
                         'inventory','media','tax','location','promotion'
                     ]
-
                     services.each { svc ->
-
                         if (!fileExists("${svc}/pom.xml")) {
                             echo "Skipping ${svc} (no pom.xml)"
                             return
                         }
 
-                        echo "Running Snyk scan for ${svc}"
+                        // Fix: cấp quyền execute cho mvnw trước khi Snyk chạy
+                        if (fileExists("${svc}/mvnw")) {
+                            sh "chmod +x ${svc}/mvnw"
+                        }
 
+                        echo "Running Snyk scan for ${svc}"
                         snykSecurity(
                             snykInstallation: 'snyk',
                             snykTokenId: 'snyk-token',
@@ -36,9 +32,7 @@ pipeline {
                 }
             }
         }
-
     }
-
     post {
         success {
             echo "Snyk scan completed (debug mode)"
