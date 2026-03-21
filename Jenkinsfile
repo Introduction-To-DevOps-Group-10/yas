@@ -25,7 +25,7 @@ pipeline {
                     projectName: 'yas-cart',
                     targetFile: 'cart/pom.xml',
                     // Đổi thành low để bắt tất cả mức độ
-                    additionalArguments: '--severity-threshold=low -d'
+                    additionalArguments: '--severity-threshold=high -d'
                 )
             }
         }
