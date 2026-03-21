@@ -1,8 +1,8 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'maven'
+    environment {
+        SNYK_TOKEN = credentials('snyk-token')
     }
 
     stages {
@@ -13,36 +13,55 @@ pipeline {
             }
         }
 
-        stage('Snyk Scan (Full Project)') {
+        stage('Install Snyk CLI') {
             steps {
-                script {
+                sh '''
+                    if ! command -v snyk &> /dev/null
+                    then
+                        echo "Installing Snyk CLI..."
+                        npm install -g snyk
+                    else
+                        echo "Snyk already installed"
+                    fi
+                '''
+            }
+        }
 
-                    echo "Scanning entire project with Snyk..."
+        stage('Snyk Scan (Debug Mode)') {
+            steps {
+                sh '''
+                    echo "===== SNYK DEBUG SCAN START ====="
 
-                    snykSecurity(
-                        snykInstallation: 'snyk',
-                        snykTokenId: 'snyk-token',
-                        failOnIssues: false, // chỉ scan, không fail
-                        projectName: "full-project-scan",
-                        targetFile: "pom.xml", // root pom
-                        additionalArguments: """
-                            --all-projects \
-                            --severity-threshold=low \
-                            --detection-depth=4 \
-                            -d
-                        """
-                    )
-                }
+                    snyk auth $SNYK_TOKEN
+
+                    snyk test \
+                      --all-projects \
+                      --detection-depth=4 \
+                      --severity-threshold=low \
+                      -d \
+                      --json-file-output=snyk-report.json || true
+
+                    echo "===== SNYK DEBUG SCAN END ====="
+                '''
+            }
+        }
+
+        stage('Archive Report') {
+            steps {
+                archiveArtifacts artifacts: 'snyk-report.json', allowEmptyArchive: true
             }
         }
     }
 
     post {
+        always {
+            cleanWs()
+        }
         success {
-            echo "Snyk full scan completed"
+            echo "Snyk scan completed (debug mode)"
         }
         failure {
-            echo "Snyk scan failed"
+            echo "Pipeline failed"
         }
     }
 }
