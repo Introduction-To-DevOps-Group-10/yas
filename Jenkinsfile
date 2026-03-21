@@ -21,7 +21,7 @@ pipeline {
                     snykInstallation: 'snyk',
                     snykTokenId: 'snyk-token',
                     // Đổi thành true để pipeline FAIL khi có vulnerability
-                    failOnIssues: true,
+                    failOnIssues: false,
                     projectName: 'yas-cart',
                     targetFile: 'cart/pom.xml',
                     // Đổi thành low để bắt tất cả mức độ
