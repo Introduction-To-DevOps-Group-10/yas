@@ -171,6 +171,7 @@ ${statusLines}
 
                                 sh """
                                 mvn sonar:sonar -pl ${svc} -am \
+                                  -Dsonar.host.url=${SONAR_HOST_URL} \
                                   -Dsonar.projectKey=${projectKey} \
                                   -Dsonar.projectName="${projectName}" \
                                   -Dsonar.inclusions=${svc}/**/* \
