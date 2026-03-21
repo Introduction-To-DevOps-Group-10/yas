@@ -16,7 +16,7 @@ pipeline {
         stage('Install Snyk CLI') {
             steps {
                 sh '''
-                    if ! command -v snyk &> /dev/null
+                    if ! command -v snyk > /dev/null 2>&1
                     then
                         echo "Installing Snyk CLI..."
                         npm install -g snyk
@@ -31,6 +31,8 @@ pipeline {
             steps {
                 sh '''
                     echo "===== SNYK DEBUG SCAN START ====="
+
+                    snyk --version
 
                     snyk auth $SNYK_TOKEN
 
@@ -51,12 +53,16 @@ pipeline {
                 archiveArtifacts artifacts: 'snyk-report.json', allowEmptyArchive: true
             }
         }
+
+        // ✅ cleanup chạy TRONG node → không lỗi nữa
+        stage('Cleanup') {
+            steps {
+                cleanWs()
+            }
+        }
     }
 
     post {
-        always {
-            cleanWs()
-        }
         success {
             echo "Snyk scan completed (debug mode)"
         }
