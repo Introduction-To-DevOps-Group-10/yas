@@ -33,11 +33,6 @@ pipeline {
         stage('Security Scan: Snyk - cart') {
         // ------------------------------------------------------------------ //
             steps {
-                // Lưu WORKSPACE path vào file marker để post dùng lại
-                // (tránh vấn đề working directory thay đổi trong post block)
-                sh 'echo "${WORKSPACE}" > /tmp/snyk_workspace_path'
-                sh 'touch /tmp/snyk_scan_start_marker'
-
                 snykSecurity(
                     snykInstallation : 'snyk',
                     snykTokenId      : 'snyk-token',
@@ -47,69 +42,59 @@ pipeline {
                     additionalArguments: '--severity-threshold=high'
                 )
             }
+
+            post {
+                // Chạy NGAY SAU khi stage kết thúc — report chắc chắn đã tồn tại
+                always {
+                    script {
+                        // Dùng find với -mmin 2: tìm file được tạo trong vòng 2 phút gần nhất
+                        // Không dùng glob expansion, không dùng marker file
+                        def report = sh(
+                            script: """
+                                find '${env.WORKSPACE}' \
+                                    -maxdepth 1 \
+                                    -name '*snyk_report.json' \
+                                    -mmin -2 \
+                                    -type f \
+                                | sort -r \
+                                | head -1
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                        if (!report) {
+                            // Fallback: lấy file có tên timestamp lớn nhất (sort theo tên)
+                            report = sh(
+                                script: """
+                                    find '${env.WORKSPACE}' \
+                                        -maxdepth 1 \
+                                        -name '*snyk_report.json' \
+                                        -type f \
+                                    | sort -r \
+                                    | head -1
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            echo "Dùng fallback report: ${report}"
+                        }
+
+                        if (report) {
+                            echo "=== SNYK REPORT: ${report} ==="
+                            sh "python3 -m json.tool '${report}' 2>/dev/null || cat '${report}'"
+                        } else {
+                            echo "Không tìm thấy Snyk report nào."
+                        }
+                    }
+                }
+            }
         }
 
     } // end stages
 
     post {
-        always {
-            script {
-                // Đọc workspace path đã lưu — tránh lỗi working dir sai trong post
-                def ws = sh(
-                    script: 'cat /tmp/snyk_workspace_path 2>/dev/null || echo ""',
-                    returnStdout: true
-                ).trim()
-
-                if (!ws) {
-                    ws = env.WORKSPACE
-                }
-
-                echo "Workspace: ${ws}"
-
-                // Liệt kê tất cả report để debug
-                sh "ls -lt '${ws}'/*snyk_report.json 2>/dev/null || echo 'Không có report nào trong workspace'"
-
-                // Tìm report mới hơn marker trong đúng workspace path
-                def report = sh(
-                    script: """
-                        find '${ws}' -maxdepth 1 \
-                            -name '*snyk_report.json' \
-                            -newer /tmp/snyk_scan_start_marker \
-                            2>/dev/null \
-                        | sort -r \
-                        | head -1
-                    """,
-                    returnStdout: true
-                ).trim()
-
-                if (report) {
-                    echo "=== SNYK REPORT: ${report} ==="
-                    sh "cat '${report}' | python3 -m json.tool 2>/dev/null || cat '${report}'"
-                } else {
-                    // Fallback: lấy report mới nhất bất kể marker
-                    echo "Không tìm thấy report mới hơn marker, lấy report mới nhất..."
-                    def fallback = sh(
-                        script: "ls -t '${ws}'/*snyk_report.json 2>/dev/null | head -1",
-                        returnStdout: true
-                    ).trim()
-
-                    if (fallback) {
-                        echo "=== SNYK REPORT (fallback): ${fallback} ==="
-                        sh "cat '${fallback}' | python3 -m json.tool 2>/dev/null || cat '${fallback}'"
-                    } else {
-                        echo "Không tìm thấy bất kỳ Snyk report nào."
-                    }
-                }
-
-                // Dọn dẹp marker
-                sh 'rm -f /tmp/snyk_scan_start_marker /tmp/snyk_workspace_path'
-            }
-        }
-
         success {
             echo "✅ Pipeline hoàn thành — không có vulnerability nào vượt threshold."
         }
-
         failure {
             echo "❌ Pipeline thất bại — phát hiện vulnerability hoặc build lỗi!"
         }
