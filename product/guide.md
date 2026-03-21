@@ -3,7 +3,7 @@
 
 ## 1. Cấu hình JaCoCo Plugin trong `pom.xml`
 
-Để biết được số lượng mã nguồn đã được unit test tự động đi qua, ta cần sử dụng công cụ tính coverage là **JaCoCo**.
+Để biết được số lượng mã nguồn đã được unit test tự động đi qua, ta cần sử dụng công cụ tính coverage là **JaCoCo**...
 
 Mình đã thêm cấu hình JaCoCo trực tiếp vào file `product/pom.xml` như sau:
 
