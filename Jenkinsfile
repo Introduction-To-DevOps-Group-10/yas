@@ -3,13 +3,16 @@ pipeline {
     stages {
         stage('Security Scan: Snyk - cart only') {
             steps {
-                // 1. Install root POM
+                // Xóa cache Maven bị corrupt từ lần trước
+                sh 'rm -rf /var/lib/jenkins/.m2/repository/com/yas'
+
+                // Install root POM
                 sh 'mvn install -N -DskipTests'
 
-                // 2. Install common-library (không có mvnw, dùng mvn hệ thống)
+                // Install common-library vào local repo
                 sh 'mvn install -DskipTests -f common-library/pom.xml'
 
-                // 3. Chạy Snyk scan cho cart
+                // Scan cart
                 snykSecurity(
                     snykInstallation: 'snyk',
                     snykTokenId: 'snyk-token',
