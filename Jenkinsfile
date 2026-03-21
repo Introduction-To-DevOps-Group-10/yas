@@ -4,7 +4,6 @@ pipeline {
     environment {
         REVISION   = "1.0-SNAPSHOT"
         MAVEN_REPO = "/var/lib/jenkins/.m2/repository"
-        SNYK_TOKEN = credentials('snyk-token')
     }
 
     stages {
@@ -30,27 +29,21 @@ pipeline {
 
         stage('Security Scan: Snyk - cart') {
             steps {
+                // snykSecurity plugin tự xử lý được DefaultSnykApiToken
+                // Chỉ dùng plugin để lấy token, còn output thì capture qua sh
                 script {
-                    // Chạy snyk test trực tiếp — output hiện thẳng ra Jenkins log
-                    // Không dùng --json nên kết quả là human-readable text
-                    // "|| true" để pipeline không fail dù có vulnerability
-                    def result = sh(
-                        script: '''
-                            /var/lib/jenkins/tools/io.snyk.jenkins.tools.SnykInstallation/snyk/snyk-linux \
-                                test \
-                                --severity-threshold=high \
-                                --file=cart/pom.xml \
-                                --project-name=yas-cart \
-                                --maven-aggregate-project \
-                                -Dmaven.repo.local=${MAVEN_REPO} \
-                                2>&1 || true
-                        ''',
-                        returnStdout: true
+                    // Dùng snykSecurity với additionalArguments không có --json
+                    // để output là human-readable text thẳng vào log
+                    snykSecurity(
+                        snykInstallation    : 'snyk',
+                        snykTokenId         : 'snyk-token',
+                        failOnIssues        : false,
+                        monitorProjectOnBuild: false,   // tắt monitor để gọn log
+                        projectName         : 'yas-cart',
+                        targetFile          : 'cart/pom.xml',
+                        // Không dùng --json → Snyk in text ra thẳng log
+                        additionalArguments : '--severity-threshold=high'
                     )
-
-                    // In thẳng ra log
-                    echo "=== SNYK SECURITY SCAN RESULT ==="
-                    echo result
                 }
             }
         }
