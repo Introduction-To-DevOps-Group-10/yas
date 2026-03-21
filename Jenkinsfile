@@ -7,59 +7,38 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
+         // ───────────────── SNYK (PLUGIN) ─────────────────
+        stage('Security Scan: Snyk') {
             steps {
-                checkout scm
+                script {
+
+                    def services = [
+                        'cart','customer','order','product','rating',
+                        'inventory','media','tax','location','promotion'
+                    ]
+
+                    services.each { svc ->
+
+                        if (!fileExists("${svc}/pom.xml")) {
+                            echo "Skipping ${svc} (no pom.xml)"
+                            return
+                        }
+
+                        echo "Running Snyk scan for ${svc}"
+
+                        snykSecurity(
+                            snykInstallation: 'snyk',
+                            snykTokenId: 'snyk-token',
+                            failOnIssues: false,
+                            projectName: "yas-${svc}",
+                            targetFile: "${svc}/pom.xml",
+                            additionalArguments: "--severity-threshold=high -d"
+                        )
+                    }
+                }
             }
         }
 
-        stage('Install Snyk CLI') {
-            steps {
-                sh '''
-                    if ! command -v snyk > /dev/null 2>&1
-                    then
-                        echo "Installing Snyk CLI..."
-                        npm install -g snyk
-                    else
-                        echo "Snyk already installed"
-                    fi
-                '''
-            }
-        }
-
-        stage('Snyk Scan (Debug Mode)') {
-            steps {
-                sh '''
-                    echo "===== SNYK DEBUG SCAN START ====="
-
-                    snyk --version
-
-                    snyk auth $SNYK_TOKEN
-
-                    snyk test \
-                      --all-projects \
-                      --detection-depth=4 \
-                      --severity-threshold=low \
-                      -d \
-                      --json-file-output=snyk-report.json || true
-
-                    echo "===== SNYK DEBUG SCAN END ====="
-                '''
-            }
-        }
-
-        stage('Archive Report') {
-            steps {
-                archiveArtifacts artifacts: 'snyk-report.json', allowEmptyArchive: true
-            }
-        }
-
-        // ✅ cleanup chạy TRONG node → không lỗi nữa
-        stage('Cleanup') {
-            steps {
-                cleanWs()
-            }
-        }
     }
 
     post {
