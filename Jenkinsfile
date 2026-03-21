@@ -6,8 +6,8 @@ pipeline {
                 // 1. Install root POM
                 sh 'mvn install -N -DskipTests'
 
-                // 2. Install common-library vào local repo
-                sh 'cd common-library && chmod +x mvnw && ./mvnw install -DskipTests'
+                // 2. Install common-library (không có mvnw, dùng mvn hệ thống)
+                sh 'mvn install -DskipTests -f common-library/pom.xml'
 
                 // 3. Chạy Snyk scan cho cart
                 snykSecurity(
