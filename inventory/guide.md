@@ -6,7 +6,7 @@ Dưới đây trình bày chi tiết cách mình thực hiện để bạn có b
 
 ---
 
-## 1. Cấu Hình Đo Đạc Coverage Bằng Plugin JaCoCo
+## 1. Cấu Hình Đo Đạc Coverage Bằng Plugin JaCoCoooo
 
 Mọi thứ xuất phát từ việc thiết lập "chiếc camera" theo dõi đoạn code nào đã được chạy qua. Tương tự như module `media`, `product` và `location`, mình đã thêm khai báo plugin của tool **JaCoCo** trong tệp gốc `inventory/pom.xml`.
 
