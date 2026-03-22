@@ -1,4 +1,4 @@
-# Hướng Dẫn Kính Nghiệm: Viết và Chạy Unit Test Cho Module `location`
+# Hướng Dẫn Kính Nghiệm: Viết và Chạy Unit Test Cho Module `location`nnn
 
 Chào bạn, dựa theo yêu cầu mong muốn đạt mức độ phủ sóng code (coverage) từ 70% đến 80% trở lên cho module `location`, đồng thời giữ cho code test thật dễ hiểu, mình đã cấu hình thành công công cụ đo đạc, cũng như bổ sung và tái sử dụng các mẫu test hiệu quả nhất. Mức độ bao phủ hiện tại đạt mức rất ấn tượng là **88%**.
 
