@@ -1,7 +1,7 @@
 # Hướng Dẫn Cách Viết và Chạy Unit Test Cho Product Service
 ---
 
-## 1. Cấu hình JaCoCo Plugin trong `pom.xml`
+## 1. Cấu hình JaCoCo Plugin trong `pom.xml`d
 
 Để biết được số lượng mã nguồn đã được unit test tự động đi qua, ta cần sử dụng công cụ tính coverage là **JaCoCo**.
 
