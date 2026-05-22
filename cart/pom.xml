@@ -109,3 +109,5 @@
         </plugins>
     </build>
 </project>
+
+<!-- test snyk mvnw permission -->
